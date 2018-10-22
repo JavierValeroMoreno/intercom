@@ -1,11 +1,18 @@
 import pyaudio
 import pywt
+import numpy as np
+import math
+import scipy.stats as st
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
-CHANNELS = 2
+CHANNELS = 1
 RATE = 44100
-RECORD_SECONDS = 5
+
+#Funcion para calcular la entropia de un array
+def entropy (arr):    
+    hist = np.histogram(arr, range=(arr.min(),arr.max()))
+    return st.entropy(hist[0])
 
 if __name__ == '__main__':
 
@@ -17,23 +24,36 @@ if __name__ == '__main__':
                     output = True,
                     frames_per_buffer = CHUNK,
                     )
-    print("**RECORDING 5 SECONDS**")
-    frames =[]
+    print("**RECORDING**")
 
-    for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+    while True:
+        #Leemos el chunk de audio
         data = stream.read(CHUNK)
-        frames.append(data)
+        data2=np.frombuffer(data, dtype=np.int16)
+        print("Datos Originales")
+        print("Entropia: ",entropy(data2), "\nMinimo: ", data2.min(), "\nMaximo: ", data2.max())
+       
+        #Realizamos la transformada
+        (cA, cD) = pywt.dwt(data2, 'db1')
+        print("Datos Transformada")
+        print("Primeros valores de cA: ",cA[0], cA[1], cA[2], cA[3], cA[4] )
+        print("Primeros valores de cD: ",cD[0], cD[1], cD[2], cD[3], cD[4] )
+        print("Entropia: ",entropy(cA), "\nMinimo: ", cA.min(), "\nMaximo: ", cA.max())
+        
+        #Realizamos la transformada inversa
+        decode = pywt.idwt(cA,cD, 'db1')
 
-    print("**DONE RECORDING**")
+        decode2 = np.array(decode)
+        decode2 = decode2.astype(np.int16)
+        print("Datos Transformada Inversa")
+        print("Entropia: ",entropy(decode2), "\nMinimo: ", decode2.min(), "\nMaximo: ", decode2.max())
+        
+        decode2.tobytes()
 
-    frames_int =[]
-    for _byte in frames:
-        frames_int.append(int.from_bytes(frames[1], byteorder = 'big'))
+        try:
+            stream.write(decode2,CHUNK)
+        except Exception as e:
+            decode2 = '\00' * CHUNK
+
     
-    (cA, cD) = pywt.dwt(frames_int, 'db1')
-
-    print(cA)
-    print(cD)
-
-    undwt = pywt.idwt(cA, cD, 'db1')
-    
+  
